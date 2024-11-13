@@ -1,0 +1,83 @@
+---
+- name: Setup Docker and Application Installation
+  hosts: all
+  become: yes
+  collections:
+    - community.docker
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+
+  tasks:
+
+    - name: Install pip
+      apt:
+        name: 
+          - python3-pip
+        state: present
+      tags: docker
+
+    - name: Install Docker and Important dependencies
+      apt:
+        name:
+          - docker.io
+        state: present
+      tags: docker
+ 
+    - name: Install Docker Python module using pip3
+      ansible.builtin.command:
+        cmd: pip3 install docker
+      tags: docker
+
+    - name: Install Docker Python module
+      pip:
+        name: docker
+      tags: docker
+
+    - name: Enable and Start Docker Service
+      service:
+        name: docker
+        state: started
+        enabled: true
+      tags: docker
+
+    - name: Add current user to the docker group
+      user: 
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+      tags: docker
+
+    - name: Create a Directory for Docker Setup
+      file:
+        path: /opt/docker_setup
+        state: directory
+
+    - name: Create the Docker File
+      copy: 
+        dest: /opt/docker_setup/Dockerfile
+        content: |
+          FROM: ubuntu:latest
+          RUN apt-get update && \
+              apt-get install -y apache2 mariadb-server && \
+              apt-get clean
+          EXPOSE 80
+          EXPOSE 3306
+          CMD ["sh", "-c", "service apache2 start && service mysql start && tail -f /dev/null"]
+      tags: docker
+
+    - name: Build the Docker Image
+      community.docker.docker_image:
+        path: /opt/docker_setup
+        name: web_db_image
+        tag: latest
+      tags: docker
+
+    - name: Run the Docker Container
+      community.docker.docker_container:
+        name: web_db_container
+        image: web_db_image:latest
+        state: started
+        ports:
+          - "80:80"
+          - "3306:3306"
+      tags: docker
